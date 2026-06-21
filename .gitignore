@@ -3,26 +3,43 @@ node_modules
 .pnp
 .pnp.js
 
-# build
+# env / secrets
+.env
+.env.local
+.env.*.local
+
+# python
+solver/.venv
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# build output
 dist
 dist-ssr
 *.local
+backend/dist
+
+# generated catalog database
+data/*.duckdb
+data/*.duckdb.wal
 
 # logs
 logs
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
-# editor
+# editor / os
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
 
-# challenge source data (large / not part of the app)
+# challenge source data (large) and originals
 Data - Copy.csv
 Data - Copy.csv.zip
 *.zip
 RETO 2_ Stylish/
+# local product images (~9 GB, named <id>.png) — not committed
+Flipkart/
+Fashion_Products_Image.zip

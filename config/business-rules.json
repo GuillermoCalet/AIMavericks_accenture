@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "scoreScale": 1000,
+  "weights": {
+    "contextFit": 3,
+    "styleFit": 2,
+    "colorCompatibility": 2,
+    "wardrobeCompatibility": 2,
+    "complementarity": 1,
+    "versatility": 1,
+    "budgetEfficiency": 1
+  },
+  "objective": {
+    "pairCompatibilityWeight": 1,
+    "completenessBonusPerRequired": 2000,
+    "complexityPenaltyPerItem": 1500,
+    "pricePenaltyWeight": 3,
+    "diversityPenaltyWeight": 1500
+  },
+  "optionalItemPenalty": {
+    "default": 10000,
+    "perCategory": {
+      "outerwear": 7000,
+      "bag": 10000,
+      "jewellery": 12000,
+      "accessory": 13000
+    }
+  },
+  "categoryMax": {
+    "top": 1,
+    "bottom": 1,
+    "dress": 1,
+    "outerwear": 1,
+    "footwear": 1,
+    "bag": 1,
+    "jewellery": 1,
+    "accessory": 1,
+    "ethnic": 1,
+    "innerwear": 1,
+    "other": 1
+  },
+  "incompatibleCategories": [
+    ["dress", "top"],
+    ["dress", "bottom"],
+    ["ethnic", "top"],
+    ["ethnic", "bottom"],
+    ["ethnic", "dress"]
+  ],
+  "items": { "min": 2, "max": 6 },
+  "retrieval": { "maxCandidatesPerCategory": 20, "broadLimit": 300 },
+  "pairs": { "compatibilityThreshold": 0.55, "maxPairs": 1500 },
+  "diversity": { "maxSharedProducts": 3, "minJaccardDistance": 0.34, "minQualityRatio": 0.7 },
+  "inventory": {
+    "unknownStockPolicy": "allow",
+    "unknownSizePolicy": "allow",
+    "unknownDataPenalty": 80
+  },
+  "relaxation": {
+    "allowOverBudget": false,
+    "relaxableRequiredCategories": ["bottom", "top", "outerwear"],
+    "immutableHard": [
+      "avoid_colors",
+      "avoid_items",
+      "stock_out",
+      "size_incompatible",
+      "anchor_inclusion",
+      "incompatible_categories",
+      "gender_coherence",
+      "budget_max"
+    ],
+    "ladder": [
+      { "level": 0, "label": "strict", "relaxes": [] },
+      { "level": 1, "label": "fewer_optional_complements", "relaxes": ["min_items"] },
+      { "level": 2, "label": "drop_relaxable_required_categories", "relaxes": ["required_categories"] },
+      { "level": 3, "label": "widen_formality_range", "relaxes": ["formality_range"] },
+      { "level": 4, "label": "lower_colour_affinity", "relaxes": ["colour_affinity"] },
+      { "level": 5, "label": "suggest_budget_increase", "relaxes": ["budget_suggestion"] }
+    ]
+  },
+  "policies": {
+    "balanced": {},
+    "best_quality": {
+      "objective": { "pricePenaltyWeight": 0, "complexityPenaltyPerItem": 600, "pairCompatibilityWeight": 2 },
+      "optionalItemPenalty": { "default": 6000, "perCategory": { "accessory": 8000, "jewellery": 7000, "bag": 5500, "outerwear": 3500 } }
+    },
+    "budget_conscious": {
+      "objective": { "pricePenaltyWeight": 8, "complexityPenaltyPerItem": 3500 },
+      "optionalItemPenalty": { "default": 16000, "perCategory": { "accessory": 18000, "jewellery": 17000, "bag": 15000, "outerwear": 10000 } }
+    },
+    "minimum_items": {
+      "objective": { "complexityPenaltyPerItem": 8000, "completenessBonusPerRequired": 1500, "pairCompatibilityWeight": 0 },
+      "optionalItemPenalty": { "default": 30000, "perCategory": { "accessory": 30000, "jewellery": 30000, "bag": 30000, "outerwear": 30000 } }
+    },
+    "basket_growth": {
+      "objective": { "pricePenaltyWeight": 1, "complexityPenaltyPerItem": 0, "completenessBonusPerRequired": 2600 },
+      "optionalItemPenalty": { "default": 2500, "perCategory": { "accessory": 3500, "jewellery": 3000, "bag": 2000, "outerwear": 1200 } }
+    }
+  },
+  "defaultPolicy": "balanced"
+}

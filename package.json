@@ -1,27 +1,31 @@
 {
   "name": "ai-fashion-copilot",
+  "version": "2.0.0",
   "private": true,
-  "version": "1.0.0",
-  "description": "AI Fashion Copilot — conversational outfit recommendations powered by wardrobe context, buyer intent and logical reasoning. Demo prototype for the Accenture GenAI Mavericks challenge.",
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+  "description": "AI Fashion Copilot — real recommender: React + TS backend (DuckDB, local Ollama) + Python OR-Tools CP-SAT solver.",
+  "workspaces": [
+    "shared",
+    "backend",
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=18"
   },
-  "dependencies": {
-    "lucide-react": "^0.456.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+  "scripts": {
+    "setup": "bash scripts/setup-solver.sh",
+    "catalog:import": "npm --workspace backend run catalog:import",
+    "dev": "concurrently -k -n solver,backend,frontend -c magenta,blue,green \"npm:dev:solver\" \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:solver": "bash scripts/run-solver.sh",
+    "dev:backend": "npm --workspace backend run dev",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "build": "npm --workspace backend run build && npm --workspace frontend run build",
+    "typecheck": "npm --workspace shared run typecheck && npm --workspace backend run typecheck && npm --workspace frontend run typecheck",
+    "test": "npm --workspace backend run test -- --run && npm run test:solver",
+    "test:backend": "npm --workspace backend run test -- --run",
+    "test:solver": "bash scripts/run-pytest.sh"
   },
   "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.15",
-    "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "concurrently": "^9.1.0"
   }
 }
