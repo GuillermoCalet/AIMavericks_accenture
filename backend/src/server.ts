@@ -57,7 +57,16 @@ app.get(
     }
     res.json({
       status: 'ok',
-      llm: { provider: getLlmProvider().name, configured: getLlmProvider().available },
+      llm: {
+        provider: getLlmProvider().name,
+        configured: getLlmProvider().available,
+        ...(config.llmProvider === 'ollama'
+          ? {
+              textModel: config.ollama.textModel,
+              visionModel: config.ollama.visionModel,
+            }
+          : { model: config.gemini.model }),
+      },
       catalog: { products: catalogCount, ready: catalogCount > 0 },
       solver: { url: config.solver.url },
       policies: OPTIMIZATION_POLICIES,
@@ -161,7 +170,13 @@ if (process.env.NODE_ENV !== 'test') {
   const port = config.api.port
   app.listen(port, () => {
     console.log(`\n🚀 AI Fashion Copilot API on http://localhost:${port}`)
-    console.log(`   LLM provider:   ${getLlmProvider().name} (${config.ollama.model})`)
+    console.log(`   LLM provider:   ${getLlmProvider().name}`)
+    if (config.llmProvider === 'ollama') {
+      console.log(`   Text model:     ${config.ollama.textModel}`)
+      console.log(`   Vision model:   ${config.ollama.visionModel}`)
+    } else {
+      console.log(`   Gemini model:   ${config.gemini.model}`)
+    }
     console.log(`   Solver URL:     ${config.solver.url}`)
   })
 }

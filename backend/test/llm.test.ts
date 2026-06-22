@@ -61,17 +61,32 @@ describe('Zod schemas', () => {
     expect(parsed.budgetLevel).toBe('unknown')
     expect(parsed.anchorItems).toEqual([])
   })
+  it('normalizes nullable optional intent strings from smaller local models', () => {
+    const parsed = IntentLlmSchema.parse({
+      occasion: 'dinner',
+      desiredStyle: null,
+      recommendationGoal: null,
+    })
+    expect(parsed.desiredStyle).toBe('versatile')
+    expect(parsed.recommendationGoal).toBe('complete outfit')
+  })
   it('validates explanation shape', () => {
     expect(() => ExplanationLlmSchema.parse({ perItem: [] })).toThrow() // missing summary
   })
   it('validates stylist selection shape', () => {
     const parsed = StylistSelectionLlmSchema.parse({
-      selectedOutfitId: 'solver-outfit-2',
-      reason: 'Best wardrobe match',
-      summary: 'This look complements the existing wardrobe.',
-      perItem: [{ productId: 'cat-1', reason: 'Fills a wardrobe gap.' }],
+      evaluations: [{
+        outfitId: 'solver-outfit-2',
+        colorHarmony: 0.9,
+        styleCoherence: 0.8,
+        occasionFit: 0.9,
+        wardrobeFit: 0.85,
+        reason: 'Best wardrobe match',
+        summary: 'This look complements the existing wardrobe.',
+        perItem: [{ productId: 'cat-1', reason: 'Fills a wardrobe gap.' }],
+      }],
     })
-    expect(parsed.selectedOutfitId).toBe('solver-outfit-2')
+    expect(parsed.evaluations[0].outfitId).toBe('solver-outfit-2')
   })
 })
 
@@ -115,6 +130,44 @@ describe('generateStructured (repair + failure)', () => {
       LlmRateLimitError,
     )
     expect(provider.calls).toBe(1) // a 429 is not a validation error → no second call
+  })
+})
+
+describe('extractIntent semantic normalization', () => {
+  it('corrects an upper budget bound and ignores hallucinated required categories', async () => {
+    const provider = new FakeProvider([
+      JSON.stringify({
+        occasion: 'casual dinner',
+        desiredStyle: 'elegant comfortable',
+        budgetLevel: 'low',
+        minBudget: 250,
+        maxBudget: null,
+        anchorItems: ['black jeans'],
+        requiredCategories: [
+          'top',
+          'bottom',
+          'dress',
+          'outerwear',
+          'footwear',
+          'bag',
+          'jewellery',
+          'accessory',
+          'ethnic',
+          'innerwear',
+        ],
+        recommendationGoal: null,
+      }),
+    ])
+
+    const result = await extractIntent(
+      provider,
+      'I need a complete outfit under €250 and want to reuse my black jeans.',
+    )
+
+    expect(result.minBudget).toBeNull()
+    expect(result.maxBudget).toBe(250)
+    expect(result.requiredCategories).toEqual(['bottom'])
+    expect(result.recommendationGoal).toBe('complete outfit')
   })
 })
 

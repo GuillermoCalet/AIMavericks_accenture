@@ -46,7 +46,7 @@ export function BuyerIntentChat({
           Say what you’re looking for
         </h2>
         <p className="mt-3 text-ink-muted">
-          Type the occasion in plain language. Local Qwen extracts structured metadata, and the
+          Type the occasion in plain language. The configured AI provider extracts structured metadata, and the
           deterministic engine + OR-Tools solver build the outfit.
         </p>
       </header>
@@ -205,7 +205,7 @@ function MetadataEmpty() {
       </span>
       <p className="font-display text-lg text-ink">Extracted metadata appears here</p>
       <p className="max-w-xs text-sm text-ink-muted">
-        Send your request to see the structured fields the local model extracts.
+        Send your request to see the structured fields the AI model extracts.
       </p>
     </div>
   )
@@ -247,7 +247,7 @@ function MetadataPanel({ meta }: { meta: IntentMetadata }) {
     <div className="card animate-fade-up overflow-hidden">
       <div className="flex items-center justify-between border-b border-sand-100 bg-ink px-5 py-3">
         <p className="font-mono text-xs font-semibold text-sand-100">intent_metadata.json</p>
-        <span className="badge bg-emerald-500/20 text-emerald-300">Qwen local · structured</span>
+        <span className="badge bg-emerald-500/20 text-emerald-300">AI · structured output</span>
       </div>
       <dl className="divide-y divide-sand-100">
         {rows.map((r) => (

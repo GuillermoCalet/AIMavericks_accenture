@@ -41,8 +41,8 @@ export function WardrobeInput({
           Tell the copilot what you already own
         </h2>
         <p className="mt-3 text-ink-muted">
-          Describe your wardrobe or add real photos. Local Qwen analyses them and returns a structured
-          style profile — palette, key pieces and the gaps worth filling.
+          Describe your wardrobe or add real photos. The configured AI provider analyses them and
+          returns a structured style profile.
         </p>
       </header>
 

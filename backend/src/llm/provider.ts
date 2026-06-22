@@ -4,8 +4,8 @@ import { config } from '../config'
 // LLM provider abstraction.
 //
 // The rest of the backend depends only on this interface, so tests inject a
-// deterministic fake and never call the network. Production uses the local
-// Ollama HTTP API, so prompts and wardrobe images never leave the machine.
+// deterministic fake and never call the network. Production can select local
+// Ollama or Google's Gemini API without changing the recommendation pipeline.
 // ---------------------------------------------------------------------------
 
 export interface LlmImage {
@@ -17,6 +17,13 @@ export interface GenerateArgs {
   system?: string
   prompt: string
   images?: LlmImage[]
+  /** Task-specific output cap. Structured multi-outfit evaluation needs more than extraction. */
+  maxOutputTokens?: number
+  /**
+   * Selects the local model family for this request. When omitted, requests
+   * with images use vision and text-only requests use the faster text model.
+   */
+  modelRole?: 'text' | 'vision'
 }
 
 export interface LlmProvider {
@@ -81,11 +88,23 @@ interface OllamaChatResponse {
   message?: { content?: string }
 }
 
+interface GeminiGenerateResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>
+    }
+  }>
+  promptFeedback?: { blockReason?: string }
+}
+
 export class OllamaProvider implements LlmProvider {
   readonly name = 'ollama'
   readonly available = true
 
   async generateJson(args: GenerateArgs): Promise<string> {
+    const modelRole = args.modelRole ?? (args.images?.length ? 'vision' : 'text')
+    const model =
+      modelRole === 'vision' ? config.ollama.visionModel : config.ollama.textModel
     const messages: Array<Record<string, unknown>> = []
     if (args.system) messages.push({ role: 'system', content: args.system })
     messages.push({
@@ -103,24 +122,29 @@ export class OllamaProvider implements LlmProvider {
         headers: { 'content-type': 'application/json' },
         signal: AbortSignal.timeout(config.ollama.timeoutMs),
         body: JSON.stringify({
-          model: config.ollama.model,
+          model,
           messages,
           stream: false,
           format: 'json',
           think: false,
           keep_alive: config.ollama.keepAlive,
-          options: { temperature: 0, seed: 42, num_ctx: config.ollama.numCtx },
+          options: {
+            temperature: 0,
+            seed: 42,
+            num_ctx: config.ollama.numCtx,
+            num_predict: args.maxOutputTokens ?? 2048,
+          },
         }),
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       if (/abort|timeout/i.test(message)) {
         throw new LlmTransportError(
-          `Ollama timed out after ${config.ollama.timeoutMs} ms while running ${config.ollama.model}.`,
+          `Ollama timed out after ${config.ollama.timeoutMs} ms while running ${model}.`,
         )
       }
       throw new LlmUnavailableError(
-        `Could not reach Ollama at ${config.ollama.url}. Start Ollama and ensure ${config.ollama.model} is installed.`,
+        `Could not reach Ollama at ${config.ollama.url}. Start Ollama and ensure ${model} is installed.`,
       )
     }
 
@@ -128,7 +152,7 @@ export class OllamaProvider implements LlmProvider {
       const detail = (await response.text()).slice(0, 300)
       if (response.status === 404 || /model.*not found/i.test(detail)) {
         throw new LlmUnavailableError(
-          `Ollama model ${config.ollama.model} is unavailable. Run: ollama pull ${config.ollama.model}`,
+          `Ollama model ${model} is unavailable. Run: ollama pull ${model}`,
         )
       }
       throw classifyProviderError({
@@ -149,8 +173,104 @@ export class OllamaProvider implements LlmProvider {
   }
 }
 
+export class GeminiProvider implements LlmProvider {
+  readonly name = 'gemini'
+  readonly available = Boolean(config.gemini.apiKey)
+
+  async generateJson(args: GenerateArgs): Promise<string> {
+    if (!config.gemini.apiKey) {
+      throw new LlmUnavailableError(
+        'Gemini is selected but GEMINI_API_KEY is missing. Add it to the backend .env file.',
+      )
+    }
+
+    const parts: Array<Record<string, unknown>> = [{ text: args.prompt }]
+    for (const image of args.images ?? []) {
+      parts.push({
+        inlineData: {
+          mimeType: image.mimeType,
+          data: image.data.toString('base64'),
+        },
+      })
+    }
+
+    const endpoint =
+      `https://generativelanguage.googleapis.com/v1beta/models/` +
+      `${encodeURIComponent(config.gemini.model)}:generateContent`
+
+    let response: Response
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': config.gemini.apiKey,
+        },
+        signal: AbortSignal.timeout(config.gemini.timeoutMs),
+        body: JSON.stringify({
+          ...(args.system
+            ? { systemInstruction: { parts: [{ text: args.system }] } }
+            : {}),
+          contents: [{ role: 'user', parts }],
+          generationConfig: {
+            temperature: 0,
+            candidateCount: 1,
+            maxOutputTokens: args.maxOutputTokens ?? 2048,
+            responseMimeType: 'application/json',
+          },
+        }),
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (/abort|timeout/i.test(message)) {
+        throw new LlmTransportError(
+          `Gemini timed out after ${config.gemini.timeoutMs} ms while running ${config.gemini.model}.`,
+        )
+      }
+      throw new LlmUnavailableError(`Could not reach the Gemini API: ${message.slice(0, 160)}`)
+    }
+
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 500)
+      if (response.status === 401 || response.status === 403) {
+        throw new LlmUnavailableError(
+          'Gemini rejected the API key or project permissions. Check GEMINI_API_KEY.',
+        )
+      }
+      throw classifyProviderError({
+        status: response.status,
+        message: `Gemini HTTP ${response.status}: ${detail}`,
+      })
+    }
+
+    let result: GeminiGenerateResponse
+    try {
+      result = (await response.json()) as GeminiGenerateResponse
+    } catch {
+      throw new LlmTransportError('Gemini returned an invalid HTTP response.')
+    }
+
+    const content = result.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text ?? '')
+      .join('')
+      .trim()
+    if (!content) {
+      const blocked = result.promptFeedback?.blockReason
+      throw new LlmTransportError(
+        blocked
+          ? `Gemini blocked the request (${blocked}).`
+          : 'Gemini returned an empty response.',
+      )
+    }
+    return content
+  }
+}
+
 let singleton: LlmProvider | null = null
 export function getLlmProvider(): LlmProvider {
-  if (!singleton) singleton = new OllamaProvider()
+  if (!singleton) {
+    singleton =
+      config.llmProvider === 'gemini' ? new GeminiProvider() : new OllamaProvider()
+  }
   return singleton
 }

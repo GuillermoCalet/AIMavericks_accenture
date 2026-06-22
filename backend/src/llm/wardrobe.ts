@@ -47,6 +47,8 @@ export async function analyzeWardrobe(
     system: SYSTEM,
     prompt: buildPrompt(input.text, input.images.length),
     images: input.images,
+    // Text-only wardrobe descriptions do not need to load the larger vision model.
+    modelRole: input.images.length ? 'vision' : 'text',
   })
 
   return {

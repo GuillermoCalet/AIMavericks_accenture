@@ -20,9 +20,11 @@ describe('business rules config', () => {
   it('merges policy overrides over the base config', () => {
     const min = resolvePolicy('minimum_items')
     const grow = resolvePolicy('basket_growth')
+    const quality = resolvePolicy('best_quality')
     // minimum_items penalizes extra items far more than basket_growth
     expect(min.objective.complexityPenaltyPerItem).toBeGreaterThan(grow.objective.complexityPenaltyPerItem)
     expect(min.optionalItemPenalty.default).toBeGreaterThan(grow.optionalItemPenalty.default)
+    expect(quality.stylist.llmWeight).toBeGreaterThan(businessRules.stylist.llmWeight)
   })
 
   it('rejects an invalid configuration (would block startup)', () => {

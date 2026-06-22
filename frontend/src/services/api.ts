@@ -41,7 +41,13 @@ async function handle<T>(res: Response): Promise<T> {
 
 export interface HealthResponse {
   status: string
-  llm: { provider: string; configured: boolean }
+  llm: {
+    provider: string
+    configured: boolean
+    model?: string
+    textModel?: string
+    visionModel?: string
+  }
   catalog: { products: number; ready: boolean }
   solver: { url: string }
   policies?: string[]

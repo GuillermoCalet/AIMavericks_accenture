@@ -38,7 +38,7 @@ export const IntentLlmSchema = z.object({
   occasion: z.string().min(1),
   location: z.string().nullable().default(null),
   weatherContext: z.string().nullable().default(null),
-  desiredStyle: z.string().default('versatile'),
+  desiredStyle: z.preprocess((value) => value ?? 'versatile', z.string()),
   budgetLevel: BudgetLevelEnum.catch('unknown'),
   minBudget: z.number().nullable().default(null),
   maxBudget: z.number().nullable().default(null),
@@ -48,7 +48,7 @@ export const IntentLlmSchema = z.object({
   preferredColors: z.array(z.string()).default([]),
   requiredCategories: z.array(z.string()).default([]),
   optionalCategories: z.array(z.string()).default([]),
-  recommendationGoal: z.string().default('complete outfit'),
+  recommendationGoal: z.preprocess((value) => value ?? 'complete outfit', z.string()),
   sizeConstraints: z.string().nullable().default(null),
   requestedSizes: z.array(z.string()).default([]),
   genderPreference: GenderEnum.nullable().default(null),
@@ -63,12 +63,22 @@ export const ExplanationLlmSchema = z.object({
 })
 export type ExplanationLlm = z.infer<typeof ExplanationLlmSchema>
 
+const StylistScore = z.number().min(0).max(1)
+
 export const StylistSelectionLlmSchema = z.object({
-  selectedOutfitId: z.string().min(1),
-  reason: z.string().min(1),
-  summary: z.string().min(1),
-  perItem: z
-    .array(z.object({ productId: z.string().min(1), reason: z.string().min(1) }))
-    .default([]),
+  evaluations: z.array(
+    z.object({
+      outfitId: z.string().min(1),
+      colorHarmony: StylistScore,
+      styleCoherence: StylistScore,
+      occasionFit: StylistScore,
+      wardrobeFit: StylistScore,
+      reason: z.string().min(1),
+      summary: z.string().min(1),
+      perItem: z
+        .array(z.object({ productId: z.string().min(1), reason: z.string().min(1) }))
+        .default([]),
+    }),
+  ).min(1),
 })
 export type StylistSelectionLlm = z.infer<typeof StylistSelectionLlmSchema>

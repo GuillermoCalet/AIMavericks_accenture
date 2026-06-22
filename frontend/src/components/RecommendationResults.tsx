@@ -45,12 +45,10 @@ export function RecommendationResults({ recommendation, onReset }: Props) {
   }
 
   const { solver, outfits, infeasibility, policy, stylistSelection } = recommendation
-  const displayedOutfits = stylistSelection
-    ? [
-        ...outfits.filter((outfit) => outfit.rank === stylistSelection.selectedOutfitRank),
-        ...outfits.filter((outfit) => outfit.rank !== stylistSelection.selectedOutfitRank),
-      ]
-    : outfits
+  const displayedOutfits = [...outfits].sort((a, b) => a.hybridRank - b.hybridRank)
+  const stylistEvaluationByRank = new Map(
+    stylistSelection?.evaluations.map((evaluation) => [evaluation.outfitRank, evaluation]) ?? [],
+  )
 
 
   return (
@@ -66,7 +64,8 @@ export function RecommendationResults({ recommendation, onReset }: Props) {
             {stylistSelection && (
               <span className="badge bg-violet-100 text-violet-700">
                 <Sparkles className="h-3 w-3" />
-                {stylistSelection.source === 'llm' ? 'local Qwen stylist' : 'solver fallback'} · outfit #{stylistSelection.selectedOutfitRank}
+                {stylistSelection.source === 'hybrid' ? 'solver + AI ranking' : 'solver fallback'} ·
+                {' '}solver outfit #{stylistSelection.selectedOutfitRank}
               </span>
             )}
             {solver.relaxed ? (
@@ -115,6 +114,7 @@ export function RecommendationResults({ recommendation, onReset }: Props) {
             outfit={outfit}
             defaultOpen={outfit.rank === stylistSelection?.selectedOutfitRank}
             stylistPick={outfit.rank === stylistSelection?.selectedOutfitRank}
+            stylistEvaluation={stylistEvaluationByRank.get(outfit.rank)}
           />
         ))}
       </div>
@@ -180,10 +180,12 @@ function OutfitBlock({
   outfit,
   defaultOpen,
   stylistPick,
+  stylistEvaluation,
 }: {
   outfit: OutfitRecommendation
   defaultOpen: boolean
   stylistPick: boolean
+  stylistEvaluation?: NonNullable<RecommendationResult['stylistSelection']>['evaluations'][number]
 }) {
   const reasonFor = (id: string) => outfit.explanation.perItem.find((e) => e.productId === id)?.reason
   const contribFor = (id: string) => outfit.itemContributions.find((c) => c.productId === id)
@@ -192,7 +194,8 @@ function OutfitBlock({
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sand-100 px-6 py-4">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="badge bg-ink text-white">Outfit #{outfit.rank}</span>
+          <span className="badge bg-ink text-white">Recommendation #{outfit.hybridRank}</span>
+          <span className="text-xs text-ink-muted">solver rank #{outfit.rank}</span>
           <span className="font-display text-xl font-semibold text-ink">
             {outfit.currency}
             {outfit.totalPrice.toFixed(2)}
@@ -215,7 +218,10 @@ function OutfitBlock({
           )}
         </div>
         <span className="chip">
-          <Timer className="h-3.5 w-3.5" /> objective {outfit.objectiveScore.toLocaleString()}
+          <Timer className="h-3.5 w-3.5" />
+          {stylistEvaluation
+            ? `hybrid ${Math.round(stylistEvaluation.hybridScore * 100)}`
+            : `objective ${outfit.objectiveScore.toLocaleString()}`}
         </span>
       </div>
 
@@ -257,10 +263,52 @@ function OutfitBlock({
         )}
 
         <ObjectiveBars breakdown={outfit.objectiveBreakdown} />
+        {stylistEvaluation && <StylistScores evaluation={stylistEvaluation} />}
         <ScoreBars breakdown={outfit.scoreBreakdown} />
         <PairList pairs={outfit.pairCompatibilities} />
         <RulesList rules={outfit.rules} defaultOpen={defaultOpen} />
       </div>
+    </div>
+  )
+}
+
+function StylistScores({
+  evaluation,
+}: {
+  evaluation: NonNullable<RecommendationResult['stylistSelection']>['evaluations'][number]
+}) {
+  const scores = [
+    { label: 'Solver', value: evaluation.solverScore },
+    ...(evaluation.llmScore === null
+      ? []
+      : [
+          { label: 'AI stylist', value: evaluation.llmScore },
+          { label: 'Hybrid', value: evaluation.hybridScore },
+        ]),
+  ]
+  return (
+    <div className="mt-5 rounded-xl border border-violet-100 bg-violet-50/40 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-violet-600" />
+        <p className="section-label text-violet-700">Final ranking</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {scores.map((score) => (
+          <div key={score.label}>
+            <div className="mb-1 flex justify-between text-xs">
+              <span className="font-medium text-ink-muted">{score.label}</span>
+              <span className="font-mono text-ink">{Math.round(score.value * 100)}</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-white">
+              <div
+                className="h-full rounded-full bg-violet-500"
+                style={{ width: `${Math.round(score.value * 100)}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-ink-muted">{evaluation.reason}</p>
     </div>
   )
 }

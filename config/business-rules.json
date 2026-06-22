@@ -50,6 +50,10 @@
   "retrieval": { "maxCandidatesPerCategory": 20, "broadLimit": 300 },
   "pairs": { "compatibilityThreshold": 0.55, "maxPairs": 1500 },
   "diversity": { "maxSharedProducts": 3, "minJaccardDistance": 0.34, "minQualityRatio": 0.7 },
+  "stylist": {
+    "solverWeight": 0.7,
+    "llmWeight": 0.3
+  },
   "inventory": {
     "unknownStockPolicy": "allow",
     "unknownSizePolicy": "allow",
@@ -81,7 +85,8 @@
     "balanced": {},
     "best_quality": {
       "objective": { "pricePenaltyWeight": 0, "complexityPenaltyPerItem": 600, "pairCompatibilityWeight": 2 },
-      "optionalItemPenalty": { "default": 6000, "perCategory": { "accessory": 8000, "jewellery": 7000, "bag": 5500, "outerwear": 3500 } }
+      "optionalItemPenalty": { "default": 6000, "perCategory": { "accessory": 8000, "jewellery": 7000, "bag": 5500, "outerwear": 3500 } },
+      "stylist": { "solverWeight": 0.65, "llmWeight": 0.35 }
     },
     "budget_conscious": {
       "objective": { "pricePenaltyWeight": 8, "complexityPenaltyPerItem": 3500 },

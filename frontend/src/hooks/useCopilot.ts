@@ -18,12 +18,12 @@ const DEMO_INTENT_TEXT =
   'comfortable, and I’d like to reuse my black jeans, spending under €250.'
 
 function toMessage(err: unknown): string {
-  if (err instanceof ApiRequestError) {
-    if (err.code === 'LLM_UNAVAILABLE') {
-      return 'Could not reach local Ollama. Start Ollama and check that qwen3-vl:8b-instruct is installed.'
-    }
+    if (err instanceof ApiRequestError) {
+      if (err.code === 'LLM_UNAVAILABLE') {
+      return 'The configured AI provider is unavailable. Check Ollama or your Gemini API configuration.'
+      }
     if (err.code === 'LLM_RATE_LIMITED') {
-      return 'The local AI service is busy. Wait a moment and retry.'
+      return 'The AI service is busy or rate-limited. Wait a moment and retry.'
     }
     return err.message
   }
@@ -133,7 +133,7 @@ export function useCopilot() {
           wardrobe,
           wardrobeText: !wardrobe ? wardrobeText : undefined,
           optimizationPolicy: policy,
-          maxResults: 3,
+          maxResults: 5,
         },
         controller.signal,
       )
@@ -191,7 +191,7 @@ export function useCopilot() {
       scrollTo('intent')
       setRecommending(true)
       const result = await api.recommend(
-        { intentText: DEMO_INTENT_TEXT, wardrobe: ctx, optimizationPolicy: policy, maxResults: 3 },
+        { intentText: DEMO_INTENT_TEXT, wardrobe: ctx, optimizationPolicy: policy, maxResults: 5 },
         controller.signal,
       )
       setIntent(result.intent)

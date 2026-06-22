@@ -36,6 +36,16 @@ const OptionalPenaltySchema = z.object({
   perCategory: z.record(z.string(), z.number().nonnegative()).default({}),
 })
 
+const StylistShapeSchema = z.object({
+  solverWeight: z.number().nonnegative(),
+  llmWeight: z.number().nonnegative(),
+})
+
+const StylistSchema = StylistShapeSchema
+  .refine((value) => value.solverWeight + value.llmWeight > 0, {
+    message: 'At least one stylist ranking weight must be greater than zero',
+  })
+
 const PolicyOverrideSchema = z.object({
   weights: ScoreWeightsSchema.partial().optional(),
   objective: ObjectiveSchema.partial().optional(),
@@ -45,6 +55,7 @@ const PolicyOverrideSchema = z.object({
       perCategory: z.record(z.string(), z.number().nonnegative()).optional(),
     })
     .optional(),
+  stylist: StylistShapeSchema.partial().optional(),
 })
 
 const UnknownPolicy = z.enum(['allow', 'penalize', 'reject'])
@@ -71,6 +82,7 @@ const BusinessRulesSchema = z.object({
     minJaccardDistance: z.number().min(0).max(1),
     minQualityRatio: z.number().min(0).max(1),
   }),
+  stylist: StylistSchema,
   inventory: z.object({
     unknownStockPolicy: UnknownPolicy,
     unknownSizePolicy: UnknownPolicy,
@@ -148,6 +160,7 @@ export interface ResolvedBusinessConfig {
   retrieval: { maxCandidatesPerCategory: number; broadLimit: number }
   pairs: { compatibilityThreshold: number; maxPairs: number }
   diversity: { maxSharedProducts: number; minJaccardDistance: number; minQualityRatio: number }
+  stylist: z.infer<typeof StylistSchema>
   inventory: BusinessRules['inventory']
   relaxation: BusinessRules['relaxation']
 }
@@ -173,6 +186,7 @@ export function resolvePolicy(name?: string | null): ResolvedBusinessConfig {
     retrieval: businessRules.retrieval,
     pairs: businessRules.pairs,
     diversity: businessRules.diversity,
+    stylist: { ...businessRules.stylist, ...(override.stylist ?? {}) },
     inventory: businessRules.inventory,
     relaxation: businessRules.relaxation,
   }

@@ -422,12 +422,27 @@ export async function recommend(args: RecommendArgs): Promise<RecommendationResu
     intent,
     wardrobe,
     outfits: assembledOutfits,
+    solverWeight: cfg.stylist.solverWeight,
+    llmWeight: cfg.stylist.llmWeight,
   })
-  const outfits = assembledOutfits.map((outfit) =>
-    outfit.rank === stylistSelection.selectedOutfitRank
-      ? { ...outfit, explanation: stylistSelection.explanation }
-      : outfit,
+  const evaluationByRank = new Map(
+    stylistSelection.evaluations.map((evaluation) => [evaluation.outfitRank, evaluation]),
   )
+  const outfits = assembledOutfits
+    .map((outfit) =>
+      outfit.rank === stylistSelection.selectedOutfitRank
+        ? { ...outfit, explanation: stylistSelection.explanation }
+        : outfit,
+    )
+    .sort((a, b) => {
+      const evalA = evaluationByRank.get(a.rank)
+      const evalB = evaluationByRank.get(b.rank)
+      return (
+        (evalB?.hybridScore ?? 0) - (evalA?.hybridScore ?? 0) ||
+        a.rank - b.rank
+      )
+    })
+    .map((outfit, index) => ({ ...outfit, hybridRank: index + 1 }))
 
   return {
     intent,
@@ -456,6 +471,9 @@ export async function recommend(args: RecommendArgs): Promise<RecommendationResu
       selectedOutfitRank: stylistSelection.selectedOutfitRank,
       source: stylistSelection.source,
       reason: stylistSelection.reason,
+      solverWeight: stylistSelection.solverWeight,
+      llmWeight: stylistSelection.llmWeight,
+      evaluations: stylistSelection.evaluations,
     },
     outfits,
     infeasibility: null,
@@ -575,6 +593,7 @@ async function assembleOutfits(
 
     out.push({
       rank: i + 1,
+      hybridRank: i + 1,
       products,
       reusedWardrobeItems,
       totalPrice: Number(totalPrice.toFixed(2)),

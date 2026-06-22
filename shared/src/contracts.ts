@@ -201,6 +201,8 @@ export interface SolverMetrics {
 /** A fully assembled, real recommendation surfaced to the UI. */
 export interface OutfitRecommendation {
   rank: number
+  /** Final position after deterministic solver + LLM stylist blending. */
+  hybridRank: number
   products: Product[]
   reusedWardrobeItems: WardrobeItem[]
   totalPrice: number
@@ -221,6 +223,19 @@ export interface OutfitRecommendation {
     perItem: { productId: string; reason: string }[]
     source: 'llm' | 'deterministic'
   }
+}
+
+export interface StylistOutfitEvaluation {
+  /** Original solver rank, kept stable for auditability. */
+  outfitRank: number
+  solverScore: number
+  llmScore: number | null
+  hybridScore: number
+  colorHarmony: number | null
+  styleCoherence: number | null
+  occasionFit: number | null
+  wardrobeFit: number | null
+  reason: string
 }
 
 export interface RecommendationResult {
@@ -244,8 +259,11 @@ export interface RecommendationResult {
   /** Final stylist choice among the solver-valid outfits. */
   stylistSelection: {
     selectedOutfitRank: number
-    source: 'llm' | 'solver'
+    source: 'hybrid' | 'solver'
     reason: string
+    solverWeight: number
+    llmWeight: number
+    evaluations: StylistOutfitEvaluation[]
   } | null
   outfits: OutfitRecommendation[]
   /** Present when no outfit could be produced — actionable guidance. */

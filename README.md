@@ -3,12 +3,12 @@
 A **functional** conversational outfit recommender for the Accenture · GenAI Mavericks challenge. It
 recommends **real outfits** from the **real catalog** (`Data - Copy.csv`, 62k products) using:
 
-1. The user's wardrobe (text **and** real photos) → local **Qwen3-VL via Ollama** structured analysis.
-2. The natural-language request → local **Qwen3-VL** structured intent extraction.
+1. A selectable LLM provider: fast cloud **Gemini** for demos, or fully local **Ollama**.
+2. With Ollama, wardrobe photos use **Gemma 3 4B** and text tasks use **Llama 3.2 3B**.
 3. A **deterministic rules engine** (hard constraints + explainable soft scores).
 4. **Google OR-Tools CP-SAT** optimization (Python/FastAPI) to select the best combinations.
-5. A final **local Qwen stylist selection** over solver-valid combinations, using the full wardrobe
-   context, plus a grounded explanation (solver-ranked fallback if Ollama is unavailable).
+5. A final **hybrid ranking**: the selected LLM evaluates every solver-valid outfit, then the backend
+   combines 70% deterministic solver score with 30% stylist score.
 
 > The LLM never invents products or bypasses constraints. It (a) turns text/images into structured
 > data and (b) chooses only among combinations already validated by the solver. Catalog, prices,
@@ -25,13 +25,13 @@ recommends **real outfits** from the **real catalog** (`Data - Copy.csv`, 62k pr
                                          │ HTTP (JSON / multipart)
                         ┌────────────────▼────────────────────────────────┐
   Node + TS (Express)   │  backend/                                        │
-                        │   ├─ Ollama/Qwen wardrobe analyzer (local vision)│
-                        │   ├─ Ollama/Qwen intent extractor                │
+                        │   ├─ Gemini or Ollama multimodal analysis        │
+                        │   ├─ provider-independent structured extraction  │
                         │   ├─ DuckDB catalog  (62k real products)         │
                         │   ├─ deterministic rules + filters (hard/soft)   │
                         │   ├─ candidate retrieval (DuckDB + ranking)      │
                         │   ├─ solver client ──────────────┐               │
-                        │   └─ Ollama/Qwen post-solver stylist│              │
+                        │   └─ hybrid solver + AI post-ranking             │
                         └───────────────────────────────────┼──────────────┘
                                                             │ HTTP
                         ┌───────────────────────────────────▼──────────────┐
@@ -43,8 +43,8 @@ recommends **real outfits** from the **real catalog** (`Data - Copy.csv`, 62k pr
   shared/  — type-only contracts imported by frontend + backend
 ```
 
-**Pipeline:** `UI → wardrobe API (local Qwen) → intent (local Qwen) → DuckDB retrieval → rules engine →
-CP-SAT solver → local Qwen selection over valid outfits + explanation → UI`.
+**Pipeline:** `UI → selected LLM provider → DuckDB retrieval → rules engine → CP-SAT solver →
+AI evaluates all feasible outfits → deterministic 70/30 hybrid ranking → UI`.
 
 ---
 
@@ -52,7 +52,8 @@ CP-SAT solver → local Qwen selection over valid outfits + explanation → UI`.
 
 - **Node.js ≥ 18** (built on Node 22) and npm.
 - **Python 3.10+** (built on 3.12) with `venv`.
-- **Ollama** with `qwen3-vl:8b-instruct` installed. No API key is required.
+- Either **Gemini API** with `GEMINI_API_KEY`, or **Ollama** with `gemma3:4b` and
+  `llama3.2:3b` installed.
 
 > The full pipeline runs locally without external AI services, request quotas or API keys.
 
@@ -61,7 +62,6 @@ CP-SAT solver → local Qwen selection over valid outfits + explanation → UI`.
 ## Quick start
 
 ```bash
-ollama pull qwen3-vl:8b-instruct # one-time model download
 cp .env.example .env          # optional: defaults already target local Ollama
 npm install                   # installs all JS workspaces (incl. native DuckDB)
 npm run setup                 # creates the Python venv + installs OR-Tools/FastAPI
@@ -74,15 +74,42 @@ Open **http://localhost:5173**.
 > `npm run dev` runs all three services together. You can also run them separately:
 > `npm run dev:solver`, `npm run dev:backend`, `npm run dev:frontend`.
 
+For the fastest demo, configure:
+
+```env
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_backend_only_key
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+For private, local inference:
+
+```bash
+ollama pull gemma3:4b
+ollama pull llama3.2:3b
+```
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_TEXT_MODEL=llama3.2:3b
+OLLAMA_VISION_MODEL=gemma3:4b
+```
+
 ### Environment variables (`.env`)
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
+| `LLM_PROVIDER` | `ollama` | Active provider: `ollama` or `gemini` |
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Local Ollama API |
-| `OLLAMA_MODEL` | `qwen3-vl:8b-instruct` | Local non-thinking text + vision model |
+| `OLLAMA_TEXT_MODEL` | `llama3.2:3b` | Faster model for intent, text-only wardrobe input and stylist output |
+| `OLLAMA_VISION_MODEL` | `gemma3:4b` | Multimodal model used only when wardrobe photos are attached |
+| `OLLAMA_MODEL` | unset | Backwards-compatible fallback that uses one model for both roles |
 | `OLLAMA_TIMEOUT_MS` | `300000` | Maximum time for one local model call |
 | `OLLAMA_NUM_CTX` | `8192` | Context window used by the pipeline |
 | `OLLAMA_KEEP_ALIVE` | `10m` | Keep model loaded between pipeline stages |
+| `GEMINI_API_KEY` | unset | Backend-only Google AI Studio key |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model used for text and images |
+| `GEMINI_TIMEOUT_MS` | `60000` | Maximum time for one Gemini request |
 | `API_PORT` | `3001` | Backend port |
 | `CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins (restrict in prod) |
 | `MAX_UPLOAD_SIZE_MB` | `8` | Max image upload size per file |
@@ -123,11 +150,11 @@ Typical output: `imported ≈ 62,146`, `discarded ≈ 51`.
 
 ## How the recommendation works
 
-1. **Wardrobe** (`POST /api/wardrobe/analyze`, multipart) — local Qwen turns text + photos into a typed
-   `WardrobeContext` (style, palette, key/missing pieces, formality, per-item attributes). Validated
-   with Zod (one controlled repair retry; a clear error otherwise — never a silent mock).
-2. **Intent** (`POST /api/intent/extract`) — local Qwen extracts typed metadata (occasion, weather *only
-   if mentioned*, budget, anchor items, avoid items/colours, required categories…). Validated with Zod.
+1. **Wardrobe** (`POST /api/wardrobe/analyze`, multipart) — the selected provider analyzes text and
+   photos. Ollama routes photos to Gemma and text-only requests to Llama; Gemini uses its configured
+   multimodal model. The typed `WardrobeContext` is validated with Zod.
+2. **Intent** (`POST /api/intent/extract`) — the selected provider extracts typed metadata
+   (occasion, weather *only if mentioned*, budget, anchors and constraints). Validated with Zod.
 3. **Retrieval** — DuckDB applies hard SQL filters (available, `price ≤ budget`, gender, category)
    and a relevance ordering (formality + preferred colours). The backend then applies the remaining
    hard rules, scores survivors, and keeps the top *N* per category. Rejections are auditable.
@@ -141,10 +168,12 @@ Typical output: `imported ≈ 62,146`, `discarded ≈ 51`.
 6. **Inventory** (`backend/src/rules/inventory.ts`) — hard stock/size filters with an explicit
    unknown-data policy (the dataset has no stock/size, so values are `unknown`; never invented).
 7. **CP-SAT solver** (`solver/`) — see the optimization model below.
-8. **Post-solver stylist** (`backend/src/llm/stylist.ts`) — local Qwen receives the typed intent, complete
-   wardrobe context and only the feasible outfits returned by OR-Tools. It selects one supplied
-   `outfitId` and explains its products. Zod rejects invented outfit/product IDs. If Ollama is
-   unavailable or invalid, rank 1 from the solver is preserved with a deterministic explanation.
+8. **Post-solver hybrid ranking** (`backend/src/llm/stylist.ts`) — the selected provider receives the
+   typed intent, wardrobe and up to five feasible outfits. It must score every supplied outfit for
+   colour harmony, style coherence, occasion fit and wardrobe fit. The backend averages those four
+   dimensions and combines them with the normalized solver objective (70% solver / 30% AI in the
+   `balanced` policy). The model never declares the winner directly. Missing, duplicated or invented
+   outfit/product IDs invalidate the response; solver rank 1 is then preserved.
 
 ---
 
@@ -186,7 +215,7 @@ solver's objective value exactly (asserted in tests).
 **Progressive relaxation** — the backend tries an explicit, configurable ladder and records every
 attempt (`relaxationAttempts`: level, label, relaxed rules, reason, original/relaxed values, solver
 status, time). Levels: `0 strict → 1 fewer optional complements → 2 drop relaxable required
-categories → 3 widen formality range → 4 lower colour affinity / drop gender → 5 suggest budget
+categories → 3 widen formality range → 4 lower colour affinity (gender remains fixed) → 5 suggest budget
 increase` (never auto-exceeds budget unless `allowOverBudget`). Nothing is relaxed silently; the UI
 shows the final level and which rules were relaxed.
 
@@ -303,9 +332,9 @@ logged.
 All tunable numbers live in **`config/business-rules.json`** (validated with Zod at backend startup
 and Pydantic in the solver request). It defines score weights, the price/optional/complexity
 penalties, category maxima and incompatibilities, item bounds, candidate limits, the unknown
-stock/size policy, the relaxation ladder, pair/quality/diversity thresholds and the named
-optimization policies. **An invalid config makes the backend fail fast** — there are no magic numbers
-scattered through the code.
+stock/size policy, the relaxation ladder, pair/quality/diversity thresholds, hybrid stylist weights
+and the named optimization policies. **An invalid config makes the backend fail fast** — there are
+no magic numbers scattered through the code.
 
 ---
 
@@ -315,9 +344,9 @@ scattered through the code.
   absolute prices read low; budget logic is correct relative to that rate.
 - Category/attribute enrichment is dictionary/regex based — good coverage, but some niche titles fall
   into `other`.
-- Ollama must be running for wardrobe and intent extraction. If it is unavailable during the final
-  stylist stage, the application preserves solver rank 1 with a deterministic explanation. There are
-  no external quotas or API keys.
+- The selected provider must be available. Gemini is faster but has network/quota considerations;
+  Ollama is private and quota-free but may be slow without GPU acceleration. If the provider fails
+  during the final stylist stage, solver rank 1 and its deterministic explanation are preserved.
 - No Docker is required for local dev. (A `docker-compose.yml` could be added but is optional.)
 - **Stock & size are `unknown` for the whole dataset** (the CSV has neither). The contracts,
   filters and unknown-data policy are fully implemented; a real inventory API can populate

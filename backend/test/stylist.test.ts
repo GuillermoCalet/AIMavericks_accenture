@@ -61,6 +61,7 @@ function product(id: string, title: string): Product {
 function outfit(rank: number, item: Product): OutfitRecommendation {
   return {
     rank,
+    hybridRank: rank,
     products: [item],
     reusedWardrobeItems: [],
     totalPrice: item.price,
@@ -121,44 +122,90 @@ const wardrobe: WardrobeContext = {
 }
 
 describe('post-solver stylist selection', () => {
-  it('selects only from solver-valid outfits and receives the wardrobe context', async () => {
+  it('scores every valid outfit and lets the 70/30 hybrid ranking choose the winner', async () => {
     const first = outfit(1, product('cat-1', 'Basic top'))
     const second = outfit(2, product('cat-2', 'Elevated top'))
+    first.objectiveScore = 1000
+    second.objectiveScore = 900
     const provider = new CapturingProvider([
       JSON.stringify({
-        selectedOutfitId: 'solver-outfit-2',
-        reason: 'It fills the elevated-top wardrobe gap.',
-        summary: 'Choose the elevated top for the dinner look.',
-        perItem: [{ productId: 'cat-2', reason: 'Complements the black trousers.' }],
+        evaluations: [
+          {
+            outfitId: 'solver-outfit-1',
+            colorHarmony: 0.4,
+            styleCoherence: 0.4,
+            occasionFit: 0.4,
+            wardrobeFit: 0.4,
+            reason: 'Safe but too basic.',
+            summary: 'A valid but basic option.',
+            perItem: [{ productId: 'cat-1', reason: 'Works, but adds little polish.' }],
+          },
+          {
+            outfitId: 'solver-outfit-2',
+            colorHarmony: 0.95,
+            styleCoherence: 0.95,
+            occasionFit: 0.95,
+            wardrobeFit: 0.95,
+            reason: 'It fills the elevated-top wardrobe gap.',
+            summary: 'Choose the elevated top for the dinner look.',
+            perItem: [{ productId: 'cat-2', reason: 'Complements the black trousers.' }],
+          },
+        ],
       }),
     ])
 
-    const result = await selectBestOutfit(provider, { intent, wardrobe, outfits: [first, second] })
+    const result = await selectBestOutfit(provider, {
+      intent,
+      wardrobe,
+      outfits: [first, second],
+      solverWeight: 0.7,
+      llmWeight: 0.3,
+    })
 
     expect(result.selectedOutfitRank).toBe(2)
-    expect(result.source).toBe('llm')
+    expect(result.source).toBe('hybrid')
     expect(result.explanation.perItem[0].productId).toBe('cat-2')
+    expect(result.evaluations).toHaveLength(2)
+    expect(result.evaluations[0].outfitRank).toBe(2)
+    expect(result.evaluations[0].hybridScore).toBeGreaterThan(result.evaluations[1].hybridScore)
+    expect(result.solverWeight).toBe(0.7)
+    expect(result.llmWeight).toBe(0.3)
+    expect(provider.calls[0].modelRole).toBe('text')
     expect(provider.calls[0].prompt).toContain('"detectedStyle":"minimal"')
     expect(provider.calls[0].prompt).toContain('solver-outfit-1')
     expect(provider.calls[0].prompt).toContain('solver-outfit-2')
   })
 
-  it('falls back to solver rank one when the model invents an outfit id twice', async () => {
+  it('falls back to solver rank one when the model omits or invents candidates twice', async () => {
     const first = outfit(1, product('cat-1', 'Basic top'))
     const second = outfit(2, product('cat-2', 'Elevated top'))
     const invalid = JSON.stringify({
-      selectedOutfitId: 'invented-outfit',
-      reason: 'Invalid',
-      summary: 'Invalid',
-      perItem: [],
+      evaluations: [{
+        outfitId: 'invented-outfit',
+        colorHarmony: 1,
+        styleCoherence: 1,
+        occasionFit: 1,
+        wardrobeFit: 1,
+        reason: 'Invalid',
+        summary: 'Invalid',
+        perItem: [],
+      }],
     })
     const provider = new CapturingProvider([invalid, invalid])
 
-    const result = await selectBestOutfit(provider, { intent, wardrobe, outfits: [first, second] })
+    const result = await selectBestOutfit(provider, {
+      intent,
+      wardrobe,
+      outfits: [first, second],
+      solverWeight: 0.7,
+      llmWeight: 0.3,
+    })
 
     expect(provider.calls).toHaveLength(2)
     expect(result.selectedOutfitRank).toBe(1)
     expect(result.source).toBe('solver')
+    expect(result.llmWeight).toBe(0)
+    expect(result.evaluations.every((evaluation) => evaluation.llmScore === null)).toBe(true)
     expect(result.explanation.source).toBe('deterministic')
   })
 })

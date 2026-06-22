@@ -14,11 +14,18 @@ function resolveFromRoot(p: string): string {
 }
 
 const EnvSchema = z.object({
+  LLM_PROVIDER: z.enum(['ollama', 'gemini']).default('ollama'),
   OLLAMA_URL: z.string().url().default('http://127.0.0.1:11434'),
-  OLLAMA_MODEL: z.string().trim().min(1).default('qwen3-vl:8b-instruct'),
+  // OLLAMA_MODEL is retained as a backwards-compatible single-model fallback.
+  OLLAMA_MODEL: z.string().trim().min(1).optional(),
+  OLLAMA_TEXT_MODEL: z.string().trim().min(1).optional(),
+  OLLAMA_VISION_MODEL: z.string().trim().min(1).optional(),
   OLLAMA_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
   OLLAMA_KEEP_ALIVE: z.string().trim().min(1).default('10m'),
   OLLAMA_NUM_CTX: z.coerce.number().int().positive().default(8192),
+  GEMINI_API_KEY: z.string().trim().optional(),
+  GEMINI_MODEL: z.string().trim().min(1).default('gemini-2.5-flash'),
+  GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   API_PORT: z.coerce.number().int().positive().default(3001),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   MAX_UPLOAD_SIZE_MB: z.coerce.number().positive().default(8),
@@ -40,15 +47,23 @@ if (!parsed.success) {
 }
 
 const env = parsed.data
+const legacyOllamaModel = env.OLLAMA_MODEL
 
 export const config = {
   repoRoot: REPO_ROOT,
+  llmProvider: env.LLM_PROVIDER,
   ollama: {
     url: env.OLLAMA_URL.replace(/\/+$/, ''),
-    model: env.OLLAMA_MODEL,
+    textModel: env.OLLAMA_TEXT_MODEL ?? legacyOllamaModel ?? 'llama3.2:3b',
+    visionModel: env.OLLAMA_VISION_MODEL ?? legacyOllamaModel ?? 'gemma3:4b',
     timeoutMs: env.OLLAMA_TIMEOUT_MS,
     keepAlive: env.OLLAMA_KEEP_ALIVE,
     numCtx: env.OLLAMA_NUM_CTX,
+  },
+  gemini: {
+    apiKey: env.GEMINI_API_KEY ?? '',
+    model: env.GEMINI_MODEL.replace(/^models\//, ''),
+    timeoutMs: env.GEMINI_TIMEOUT_MS,
   },
   api: {
     port: env.API_PORT,

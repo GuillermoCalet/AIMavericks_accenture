@@ -101,6 +101,7 @@ export async function explainOutfit(
     const llm = await generateStructured(provider, ExplanationLlmSchema, {
       system: SYSTEM,
       prompt: buildPrompt(input),
+      modelRole: 'text',
     })
     const validIds = new Set(input.products.map((p) => p.id))
     // Guard: drop any per-item entry that references a product not in the outfit.
