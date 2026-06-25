@@ -37,6 +37,11 @@ const EnvSchema = z.object({
   MAX_CANDIDATES_PER_CATEGORY: z.coerce.number().int().positive().default(20),
   // Local product images named <id>.png (matches the CSV id). Optional.
   PRODUCT_IMAGES_DIR: z.string().default('./Flipkart'),
+  // Weather enrichment (Open-Meteo, no API key). Defaults ON, except in tests.
+  WEATHER_ENABLED: z.enum(['true', 'false']).optional(),
+  WEATHER_GEOCODE_URL: z.string().url().default('https://geocoding-api.open-meteo.com/v1/search'),
+  WEATHER_FORECAST_URL: z.string().url().default('https://api.open-meteo.com/v1/forecast'),
+  WEATHER_TIMEOUT_MS: z.coerce.number().int().positive().default(4_000),
 })
 
 const parsed = EnvSchema.safeParse(process.env)
@@ -82,6 +87,17 @@ export const config = {
   },
   images: {
     dir: resolveFromRoot(env.PRODUCT_IMAGES_DIR),
+  },
+  weather: {
+    // Live forecast is non-deterministic and adds latency, so it is disabled
+    // during tests by default. Any failure falls back to a null weatherContext,
+    // which is the engine's pre-existing "unknown weather" behaviour.
+    enabled: env.WEATHER_ENABLED
+      ? env.WEATHER_ENABLED === 'true'
+      : process.env.NODE_ENV !== 'test',
+    geocodeUrl: env.WEATHER_GEOCODE_URL,
+    forecastUrl: env.WEATHER_FORECAST_URL,
+    timeoutMs: env.WEATHER_TIMEOUT_MS,
   },
 } as const
 

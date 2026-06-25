@@ -1,4 +1,19 @@
-import { Bot, Loader2, Lock, Send, User, X } from 'lucide-react'
+import {
+  Bot,
+  Cloud,
+  CloudDrizzle,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
+  Loader2,
+  Lock,
+  Send,
+  Sun,
+  User,
+  X,
+} from 'lucide-react'
+import type { ComponentType } from 'react'
 import type { IntentMetadata } from '@copilot/shared'
 
 interface Props {
@@ -225,6 +240,27 @@ function MetadataSkeleton() {
   )
 }
 
+/**
+ * Live forecasts produced by the weather enrichment always carry a temperature
+ * ("hot, 27°C, clear"), unlike user-typed weather ("cold winter night") or the
+ * "unknown" fallback. That marker lets the UI flag the value as live data.
+ */
+function isLiveForecast(weatherContext: string | null): boolean {
+  return !!weatherContext && /-?\d+\s*°c/i.test(weatherContext)
+}
+
+/** Pick a weather glyph from the forecast condition keywords. */
+function weatherIcon(weatherContext: string): ComponentType<{ className?: string }> {
+  const w = weatherContext.toLowerCase()
+  if (/thunder/.test(w)) return CloudLightning
+  if (/snow/.test(w)) return CloudSnow
+  if (/drizzle/.test(w)) return CloudDrizzle
+  if (/rain|shower/.test(w)) return CloudRain
+  if (/fog/.test(w)) return CloudFog
+  if (/cloud/.test(w)) return Cloud
+  return Sun
+}
+
 function MetadataPanel({ meta }: { meta: IntentMetadata }) {
   const rows: { label: string; value: string; highlight?: boolean }[] = [
     { label: 'occasion', value: meta.occasion },
@@ -250,17 +286,35 @@ function MetadataPanel({ meta }: { meta: IntentMetadata }) {
         <span className="badge bg-emerald-500/20 text-emerald-300">AI · structured output</span>
       </div>
       <dl className="divide-y divide-sand-100">
-        {rows.map((r) => (
-          <div
-            key={r.label}
-            className={`flex items-center justify-between gap-3 px-5 py-2.5 ${r.highlight ? 'bg-accent-soft/50' : ''}`}
-          >
-            <dt className="font-mono text-xs text-ink-muted">{r.label}</dt>
-            <dd className={`text-right text-sm font-semibold ${r.highlight ? 'text-accent' : 'text-ink'}`}>
-              {r.value}
-            </dd>
-          </div>
-        ))}
+        {rows.map((r) => {
+          const live = r.label === 'weatherContext' && isLiveForecast(meta.weatherContext)
+          const WeatherGlyph = live ? weatherIcon(meta.weatherContext as string) : null
+          return (
+            <div
+              key={r.label}
+              className={`flex items-center justify-between gap-3 px-5 py-2.5 ${r.highlight ? 'bg-accent-soft/50' : ''}`}
+            >
+              <dt className="font-mono text-xs text-ink-muted">{r.label}</dt>
+              <dd
+                className={`flex items-center justify-end gap-2 text-right text-sm font-semibold ${
+                  r.highlight ? 'text-accent' : 'text-ink'
+                }`}
+              >
+                {WeatherGlyph && <WeatherGlyph className="h-4 w-4 text-sky-500" />}
+                <span>{r.value}</span>
+                {live && (
+                  <span
+                    className="badge gap-1 bg-sky-500/15 text-sky-600"
+                    title="Live forecast from Open-Meteo"
+                  >
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" />
+                    live
+                  </span>
+                )}
+              </dd>
+            </div>
+          )
+        })}
       </dl>
       {meta.preferredColors.length > 0 && (
         <div className="flex flex-wrap gap-1.5 border-t border-sand-100 px-5 py-3">

@@ -17,6 +17,7 @@ import { resolvePolicy } from '../businessRules'
 import { getProductsByIds } from '../catalog/db'
 import { analyzeWardrobe } from '../llm/wardrobe'
 import { extractIntent } from '../llm/intent'
+import { enrichIntentWeather } from '../weather/provider'
 import { deterministicExplanation } from '../llm/explain'
 import type { LlmProvider } from '../llm/provider'
 import { selectBestOutfit } from '../llm/stylist'
@@ -94,6 +95,10 @@ export async function recommend(args: RecommendArgs): Promise<RecommendationResu
 
   // 1. Intent (+ requested sizes from the request).
   let intent = args.intent ?? (await extractIntent(args.provider, args.intentText ?? ''))
+  // 1b. Fill an unknown weatherContext with a live forecast for the occasion's
+  // location + date. No-op (returns intent unchanged) if the user stated the
+  // weather, gave no location, or the lookup fails.
+  intent = await enrichIntentWeather(intent, args.intentText ?? '')
   if (args.requestedSizes?.length) {
     intent = {
       ...intent,

@@ -9,6 +9,7 @@ import { countProducts, getProductById } from './catalog/db'
 import { getLlmProvider } from './llm/provider'
 import { analyzeWardrobe } from './llm/wardrobe'
 import { extractIntent } from './llm/intent'
+import { enrichIntentWeather } from './weather/provider'
 import { recommend } from './recommend/orchestrator'
 import { errorHandler, HttpError, notFound } from './http/errors'
 
@@ -97,7 +98,10 @@ app.post(
   '/api/intent/extract',
   asyncH(async (req, res) => {
     const { text } = IntentBody.parse(req.body)
-    const result = await extractIntent(getLlmProvider(), text)
+    const extracted = await extractIntent(getLlmProvider(), text)
+    // Fill an unknown weatherContext with a live forecast so the UI reflects
+    // real conditions; no-op on failure or when the user stated the weather.
+    const result = await enrichIntentWeather(extracted, text)
     res.json(result)
   }),
 )
