@@ -52,7 +52,8 @@
   "diversity": { "maxSharedProducts": 3, "minJaccardDistance": 0.34, "minQualityRatio": 0.7 },
   "stylist": {
     "solverWeight": 0.7,
-    "llmWeight": 0.3
+    "llmWeight": 0.3,
+    "maxEvaluatedOutfits": 3
   },
   "inventory": {
     "unknownStockPolicy": "allow",

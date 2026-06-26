@@ -423,17 +423,25 @@ export async function recommend(args: RecommendArgs): Promise<RecommendationResu
     bounds: baseBounds,
     budgetMax,
   })
+  // The LLM stylist only judges the top solver outfits — the dominant cost on
+  // local CPU models is the prompt/response size, which scales with the number
+  // of outfits evaluated. The remaining alternates are still returned, ordered
+  // by the deterministic solver, keeping their deterministic explanations.
+  const evaluatedCount = Math.min(cfg.stylist.maxEvaluatedOutfits, assembledOutfits.length)
+  const evaluatedOutfits = assembledOutfits.slice(0, evaluatedCount)
+  const remainingOutfits = assembledOutfits.slice(evaluatedCount)
+
   const stylistSelection = await selectBestOutfit(args.provider, {
     intent,
     wardrobe,
-    outfits: assembledOutfits,
+    outfits: evaluatedOutfits,
     solverWeight: cfg.stylist.solverWeight,
     llmWeight: cfg.stylist.llmWeight,
   })
   const evaluationByRank = new Map(
     stylistSelection.evaluations.map((evaluation) => [evaluation.outfitRank, evaluation]),
   )
-  const outfits = assembledOutfits
+  const rankedEvaluated = evaluatedOutfits
     .map((outfit) =>
       outfit.rank === stylistSelection.selectedOutfitRank
         ? { ...outfit, explanation: stylistSelection.explanation }
@@ -447,7 +455,10 @@ export async function recommend(args: RecommendArgs): Promise<RecommendationResu
         a.rank - b.rank
       )
     })
-    .map((outfit, index) => ({ ...outfit, hybridRank: index + 1 }))
+  const outfits = [...rankedEvaluated, ...remainingOutfits].map((outfit, index) => ({
+    ...outfit,
+    hybridRank: index + 1,
+  }))
 
   return {
     intent,

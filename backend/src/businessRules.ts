@@ -39,6 +39,10 @@ const OptionalPenaltySchema = z.object({
 const StylistShapeSchema = z.object({
   solverWeight: z.number().nonnegative(),
   llmWeight: z.number().nonnegative(),
+  // How many top solver outfits the LLM stylist evaluates. Fewer outfits ⇒ a
+  // much smaller prompt/response (the dominant cost on local CPU models). The
+  // remaining outfits are still returned, ranked by the deterministic solver.
+  maxEvaluatedOutfits: z.number().int().positive().default(3),
 })
 
 const StylistSchema = StylistShapeSchema
